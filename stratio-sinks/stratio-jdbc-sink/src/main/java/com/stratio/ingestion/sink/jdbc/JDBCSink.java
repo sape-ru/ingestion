@@ -15,6 +15,7 @@
  */
 package com.stratio.ingestion.sink.jdbc;
 
+import java.lang.reflect.Constructor;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -64,6 +65,7 @@ import com.google.common.base.Strings;
  *      <tt>POSTGRES</tt>, <tt>SQLITE</tt>.</li>
  * <li><tt>table</tt> <em>(string)</em>: A table to store your events.
  *      <em>This is only used for automatic mapping.</em></li>
+ * <li><tt>querygenerator</tt> <em>(string)</em>: A custom query generator full class name.</li>
  * <li><tt>sql</tt> <em>(string)</em>: A custom SQL query to use. If specified,
  *      this query will be used instead of automatic mapping. E.g.
  *      <tt>INSERT INTO tweets (text, num_hashtags, timestamp) VALUES (${body:string}, ${header.numberOfHashtags:integer}, ${header.date:timestamp})</tt>.
@@ -87,6 +89,7 @@ public class JDBCSink extends AbstractSink implements Configurable {
     private static final String CONF_SQL = "sql";
     private static final String CONF_USER = "username";
     private static final String CONF_PASSWORD = "password";
+    private static final String CONF_QUERYGENERATOR = "querygenerator";
 
     private Connection connection;
     private DSLContext create;
@@ -147,7 +150,20 @@ public class JDBCSink extends AbstractSink implements Configurable {
 
         final String sql = context.getString(CONF_SQL);
         if (sql == null) {
-            this.queryGenerator = new MappingQueryGenerator(create, context.getString(CONF_TABLE));
+            final String queryGenerator = context.getString(CONF_QUERYGENERATOR);
+            if (null != queryGenerator) {
+                try {
+                    Class<? extends QueryGenerator> clazz =
+                            Class.forName(queryGenerator).asSubclass(QueryGenerator.class);
+                    Constructor<? extends QueryGenerator> ctor =
+                            clazz.getConstructor(DSLContext.class, String.class);
+                    this.queryGenerator = ctor.newInstance(create, context.getString(CONF_TABLE));
+                } catch (Exception e) {
+                    throw new JDBCSinkException("Could not instantiate querygenerator", e);
+                }
+            } else {
+                this.queryGenerator = new MappingQueryGenerator(create, context.getString(CONF_TABLE));
+            }
         } else {
             this.queryGenerator = new TemplateQueryGenerator(sqlDialect, sql);
         }

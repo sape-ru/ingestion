@@ -20,7 +20,7 @@ import org.jooq.DSLContext;
 
 import java.util.List;
 
-interface QueryGenerator {
+public interface QueryGenerator {
 
     boolean executeQuery(DSLContext dslContext, List<Event> event);
 
